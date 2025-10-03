@@ -1,6 +1,9 @@
 {
-  "name": "nextjs-website-template",
+  "name": "react-mentions",
   "version": "0.1.0",
+  "description": "React components for @ mention functionality with editable textarea and read-only display",
+  "license": "MIT",
+  "author": "Gavin Moore",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
