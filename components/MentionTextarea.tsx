@@ -72,9 +72,10 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
       .mention {
         background-color: #dbeafe;
         color: #1e40af;
-        padding: 2px 6px;
-        border-radius: 4px;
+        padding: 0px 4px;
+        border-radius: 3px;
         font-weight: 500;
+        font-size: 0.875em;
         display: inline-block;
         margin: 0 1px;
         border: 1px solid #93c5fd;

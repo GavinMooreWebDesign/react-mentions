@@ -28,9 +28,10 @@ const MentionDisplay: React.FC<MentionDisplayProps> = ({
       .mention-display {
         background-color: #dbeafe;
         color: #1e40af;
-        padding: 2px 6px;
-        border-radius: 4px;
+        padding: 0px 4px;
+        border-radius: 3px;
         font-weight: 500;
+        font-size: 0.875em;
         display: inline-block;
         margin: 0 1px;
         border: 1px solid #93c5fd;
@@ -67,9 +68,22 @@ const MentionDisplay: React.FC<MentionDisplayProps> = ({
       if (match.index > lastIndex) {
         const textBefore = text.substring(lastIndex, match.index);
         if (textBefore) {
-          parts.push({
-            type: 'text',
-            content: textBefore
+          // Split by newlines and create separate text parts for each line
+          const lines = textBefore.split('\n');
+          lines.forEach((line, lineIndex) => {
+            if (lineIndex > 0) {
+              // Add a line break before each line (except the first)
+              parts.push({
+                type: 'linebreak',
+                content: '\n'
+              });
+            }
+            if (line) {
+              parts.push({
+                type: 'text',
+                content: line
+              });
+            }
           });
         }
       }
@@ -91,9 +105,22 @@ const MentionDisplay: React.FC<MentionDisplayProps> = ({
     if (lastIndex < text.length) {
       const textAfter = text.substring(lastIndex);
       if (textAfter) {
-        parts.push({
-          type: 'text',
-          content: textAfter
+        // Split by newlines and create separate text parts for each line
+        const lines = textAfter.split('\n');
+        lines.forEach((line, lineIndex) => {
+          if (lineIndex > 0) {
+            // Add a line break before each line (except the first)
+            parts.push({
+              type: 'linebreak',
+              content: '\n'
+            });
+          }
+          if (line) {
+            parts.push({
+              type: 'text',
+              content: line
+            });
+          }
         });
       }
     }
@@ -142,6 +169,8 @@ const MentionDisplay: React.FC<MentionDisplayProps> = ({
                 {part.content}
               </span>
             );
+          } else if (part.type === 'linebreak') {
+            return <br key={index} />;
           } else {
             return <span key={index}>{part.content}</span>;
           }
