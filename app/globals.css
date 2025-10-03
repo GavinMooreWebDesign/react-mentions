@@ -118,37 +118,3 @@
     @apply bg-background text-foreground;
   }
 }
-
-/* ContentEditable placeholder styles */
-[contenteditable]:empty:before {
-  content: attr(data-placeholder);
-  color: #9ca3af;
-  pointer-events: none;
-}
-
-[contenteditable]:focus:empty:before {
-  content: attr(data-placeholder);
-  color: #9ca3af;
-}
-
-/* Mention formatting styles */
-.mention {
-  background-color: #dbeafe;
-  color: #1e40af;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-weight: 500;
-  display: inline-block;
-  margin: 0 1px;
-  border: 1px solid #93c5fd;
-  user-select: none;
-  cursor: default;
-}
-
-.mention:hover {
-  background-color: #bfdbfe;
-}
-
-.mention[contenteditable="false"] {
-  pointer-events: none;
-}

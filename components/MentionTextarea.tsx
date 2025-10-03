@@ -18,6 +18,7 @@ interface MentionTextareaProps {
   keepOpenOnSpace?: boolean;
   mentionFields?: string[];
   allowCustomMentions?: boolean;
+  options?: MentionOption[];
 }
 
 const MentionTextarea: React.FC<MentionTextareaProps> = ({
@@ -29,7 +30,8 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
   maxWidth = '200px',
   keepOpenOnSpace = false,
   mentionFields = ['name'],
-  allowCustomMentions = false
+  allowCustomMentions = false,
+  options = []
 }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
@@ -42,6 +44,64 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
   const editorRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Inject styles into document head for portability
+  useEffect(() => {
+    const styleId = 'mention-textarea-styles';
+    
+    // Check if styles already exist
+    if (document.getElementById(styleId)) {
+      return;
+    }
+
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+      /* ContentEditable placeholder styles */
+      [contenteditable]:empty:before {
+        content: attr(data-placeholder);
+        color: #9ca3af;
+        pointer-events: none;
+      }
+
+      [contenteditable]:focus:empty:before {
+        content: attr(data-placeholder);
+        color: #9ca3af;
+      }
+
+      /* Mention formatting styles */
+      .mention {
+        background-color: #dbeafe;
+        color: #1e40af;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: 500;
+        display: inline-block;
+        margin: 0 1px;
+        border: 1px solid #93c5fd;
+        user-select: none;
+        cursor: default;
+      }
+
+      .mention:hover {
+        background-color: #bfdbfe;
+      }
+
+      .mention[contenteditable="false"] {
+        pointer-events: none;
+      }
+    `;
+    
+    document.head.appendChild(style);
+
+    // Cleanup function to remove styles when component unmounts
+    return () => {
+      const existingStyle = document.getElementById(styleId);
+      if (existingStyle) {
+        existingStyle.remove();
+      }
+    };
+  }, []);
+
   // Function to escape HTML characters
   const escapeHtml = (text: string): string => {
     const div = document.createElement('div');
@@ -49,19 +109,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     return div.innerHTML;
   };
 
-  // Test data for mentions
-  const mentionOptions: MentionOption[] = [
-    { name: 'John Doe', id: '1' },
-    { name: 'Jane Smith', id: '2' },
-    { name: 'Bob Johnson', id: '3' },
-    { name: 'Alice Brown', id: '4' },
-    { name: 'Charlie Wilson', id: '5' },
-    { name: 'Diana Davis', id: '6' },
-    { name: 'Eve Miller', id: '7' },
-    { name: 'Frank Garcia', id: '8' }
-  ];
-
-  const filteredOptions = mentionOptions
+  const filteredOptions = options
     .filter(option =>
       option.name.toLowerCase().includes(mentionQuery.toLowerCase())
     )

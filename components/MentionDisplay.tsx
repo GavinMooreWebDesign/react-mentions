@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 
 interface MentionDisplayProps {
   value: string;
@@ -13,6 +13,46 @@ const MentionDisplay: React.FC<MentionDisplayProps> = ({
   className = '',
   mentionFields = ['name']
 }) => {
+  // Inject styles into document head for portability
+  useEffect(() => {
+    const styleId = 'mention-display-styles';
+    
+    // Check if styles already exist
+    if (document.getElementById(styleId)) {
+      return;
+    }
+
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+      .mention-display {
+        background-color: #dbeafe;
+        color: #1e40af;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: 500;
+        display: inline-block;
+        margin: 0 1px;
+        border: 1px solid #93c5fd;
+        user-select: none;
+        cursor: default;
+      }
+
+      .mention-display:hover {
+        background-color: #bfdbfe;
+      }
+    `;
+    
+    document.head.appendChild(style);
+
+    // Cleanup function to remove styles when component unmounts
+    return () => {
+      const existingStyle = document.getElementById(styleId);
+      if (existingStyle) {
+        existingStyle.remove();
+      }
+    };
+  }, []);
   const parseTextWithMentions = (text: string) => {
     if (!text) return null;
 
@@ -91,21 +131,21 @@ const MentionDisplay: React.FC<MentionDisplayProps> = ({
 
   return (
     <div className={className}>
-      {parts.map((part, index) => {
-        if (part.type === 'mention') {
-          return (
-            <span
-              key={index}
-              className="mention-display bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded text-sm font-medium"
-              title={part.data?.raw || ''}
-            >
-              {part.content}
-            </span>
-          );
-        } else {
-          return <span key={index}>{part.content}</span>;
-        }
-      })}
+        {parts.map((part, index) => {
+          if (part.type === 'mention') {
+            return (
+              <span
+                key={index}
+                className="mention-display"
+                title={part.data?.raw || ''}
+              >
+                {part.content}
+              </span>
+            );
+          } else {
+            return <span key={index}>{part.content}</span>;
+          }
+        })}
     </div>
   );
 };

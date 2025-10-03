@@ -8,6 +8,18 @@ export default function Home() {
   const [text, setText] = useState('');
   const [displayText, setDisplayText] = useState('');
 
+  // Sample mention options
+  const mentionOptions = [
+    { name: 'John Doe', id: '1' },
+    { name: 'Jane Smith', id: '2' },
+    { name: 'Bob Johnson', id: '3' },
+    { name: 'Alice Brown', id: '4' },
+    { name: 'Charlie Wilson', id: '5' },
+    { name: 'Diana Davis', id: '6' },
+    { name: 'Eve Miller', id: '7' },
+    { name: 'Frank Garcia', id: '8' }
+  ];
+
   return (
     <div className="max-w-2xl mx-auto p-6">
       <h1 className="text-3xl font-bold mb-6">Mention Textarea Demo</h1>
@@ -27,6 +39,7 @@ export default function Home() {
           keepOpenOnSpace={true}
           mentionFields={['name', 'id']}
           allowCustomMentions={true}
+          options={mentionOptions}
         />
         
         <div className="mt-6">
