@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 
 interface MentionOption {
   name: string;
@@ -19,6 +19,7 @@ interface MentionTextareaProps {
   mentionFields?: string[];
   allowCustomMentions?: boolean;
   options?: MentionOption[];
+  initialValue?: string;
 }
 
 const MentionTextarea: React.FC<MentionTextareaProps> = ({
@@ -31,7 +32,8 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
   keepOpenOnSpace = false,
   mentionFields = ['name'],
   allowCustomMentions = false,
-  options = []
+  options = [],
+  initialValue = ''
 }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
@@ -104,11 +106,11 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
   }, []);
 
   // Function to escape HTML characters
-  const escapeHtml = (text: string): string => {
+  const escapeHtml = useCallback((text: string): string => {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
-  };
+  }, []);
 
   const filteredOptions = options
     .filter(option =>
@@ -138,25 +140,8 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     return `@${parts.join('')}`;
   };
 
-  const cleanupEditor = () => {
-    if (!editorRef.current) return;
-    
-    // Check if editor is truly empty (no meaningful content)
-    const hasTextNodes = editorRef.current.querySelectorAll('*').length === 0 && 
-                        editorRef.current.textContent?.trim() === '';
-    const hasMentions = editorRef.current.querySelectorAll('.mention').length > 0;
-    
-    if (hasTextNodes && !hasMentions) {
-      // Only clear if there are no mentions and no meaningful content
-      editorRef.current.innerHTML = '';
-    } else {
-      // Ensure there's always a BR element at the end for proper line break behavior
-      ensureTrailingBR();
-    }
-  };
-
   // Function to ensure there's always a trailing BR element
-  const ensureTrailingBR = () => {
+  const ensureTrailingBR = useCallback(() => {
     if (!editorRef.current) return;
     
     // Check if editor is empty or only contains a single BR
@@ -179,7 +164,24 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
       const br = document.createElement('br');
       editorRef.current.appendChild(br);
     }
-  };
+  }, []);
+
+  const cleanupEditor = useCallback(() => {
+    if (!editorRef.current) return;
+    
+    // Check if editor is truly empty (no meaningful content)
+    const hasTextNodes = editorRef.current.querySelectorAll('*').length === 0 && 
+                        editorRef.current.textContent?.trim() === '';
+    const hasMentions = editorRef.current.querySelectorAll('.mention').length > 0;
+    
+    if (hasTextNodes && !hasMentions) {
+      // Only clear if there are no mentions and no meaningful content
+      editorRef.current.innerHTML = '';
+    } else {
+      // Ensure there's always a BR element at the end for proper line break behavior
+      ensureTrailingBR();
+    }
+  }, [ensureTrailingBR]);
 
   // Function to check and cleanup if only a single BR remains
   const checkAndCleanupSingleBR = () => {
@@ -200,7 +202,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     }
   };
 
-  const rebuildMentionsFromText = (textContent?: string) => {
+  const rebuildMentionsFromText = useCallback((textContent?: string) => {
     if (!editorRef.current) {
       return;
     }
@@ -308,13 +310,21 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     requestAnimationFrame(() => {
       setIsRebuilding(false);
     });
-  };
+  }, [isRebuilding, escapeHtml, ensureTrailingBR, cleanupEditor]);
 
   useEffect(() => {
     if (onChange && !isRebuilding) {
       onChange(getRawTextContent());
     }
   }, [value, onChange, isRebuilding]);
+
+  // Handle initial value
+  useEffect(() => {
+    if (initialValue && editorRef.current && !editorRef.current.textContent?.trim()) {
+      // Only set initial value if editor is empty
+      rebuildMentionsFromText(initialValue);
+    }
+  }, [initialValue, rebuildMentionsFromText]);
 
   useEffect(() => {
     const editor = editorRef.current;

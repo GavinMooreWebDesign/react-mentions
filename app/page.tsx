@@ -26,7 +26,7 @@ export default function Home() {
       <div className="space-y-4">
         <div className="mb-2">
           <p className="text-sm text-gray-600">
-            Type @ to see mentions. If you type something that doesn't match existing mentions, you can create a custom mention.
+            Type @ to see mentions. If you type something that doesn&apos;t match existing mentions, you can create a custom mention.
           </p>
         </div>
         <MentionTextarea
@@ -40,6 +40,7 @@ export default function Home() {
           mentionFields={['name', 'id']}
           allowCustomMentions={true}
           options={mentionOptions}
+          initialValue="Hello @[John Doe][1], how are you?\nThis is a new line with @[Jane Smith][2]."
         />
         
         <div className="mt-6">
@@ -60,7 +61,7 @@ export default function Home() {
                 mentionFields={['name', 'id']}
               />
             ) : (
-              <p className="text-gray-500 italic">Click "Update Display" to see the formatted text</p>
+              <p className="text-gray-500 italic">Click &quot;Update Display&quot; to see the formatted text</p>
             )}
           </div>
         </div>
