@@ -42,6 +42,13 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
   const editorRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Function to escape HTML characters
+  const escapeHtml = (text: string): string => {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  };
+
   // Test data for mentions
   const mentionOptions: MentionOption[] = [
     { name: 'John Doe', id: '1' },
@@ -85,22 +92,61 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
   const cleanupEditor = () => {
     if (!editorRef.current) return;
     
-    // Remove all BR elements that are not necessary
-    const brElements = editorRef.current.querySelectorAll('br');
-    brElements.forEach(br => {
-      // Only remove BR elements that are not the last child or are empty
-      if (br.nextSibling === null || br.textContent === '') {
-        br.remove();
-      }
-    });
-    
-    // Only clear innerHTML if there are no text nodes and no mention elements
+    // Check if editor is truly empty (no meaningful content)
     const hasTextNodes = editorRef.current.querySelectorAll('*').length === 0 && 
                         editorRef.current.textContent?.trim() === '';
     const hasMentions = editorRef.current.querySelectorAll('.mention').length > 0;
     
     if (hasTextNodes && !hasMentions) {
       // Only clear if there are no mentions and no meaningful content
+      editorRef.current.innerHTML = '';
+    } else {
+      // Ensure there's always a BR element at the end for proper line break behavior
+      ensureTrailingBR();
+    }
+  };
+
+  // Function to ensure there's always a trailing BR element
+  const ensureTrailingBR = () => {
+    if (!editorRef.current) return;
+    
+    // Check if editor is empty or only contains a single BR
+    const isEditorEmpty = editorRef.current.textContent?.trim() === '' && 
+                         editorRef.current.children.length === 0;
+    const hasOnlySingleBR = editorRef.current.children.length === 1 && 
+                           editorRef.current.firstChild?.nodeType === Node.ELEMENT_NODE &&
+                           (editorRef.current.firstChild as Element).tagName === 'BR';
+    
+    if (isEditorEmpty || hasOnlySingleBR) {
+      // If editor is empty or only has a single BR, don't add trailing BR
+      // This keeps the editor clean when it's truly empty
+      return;
+    }
+    
+    const lastChild = editorRef.current.lastChild;
+    
+    // If there's no last child or the last child is not a BR, add one
+    if (!lastChild || lastChild.nodeType !== Node.ELEMENT_NODE || (lastChild as Element).tagName !== 'BR') {
+      const br = document.createElement('br');
+      editorRef.current.appendChild(br);
+    }
+  };
+
+  // Function to check and cleanup if only a single BR remains
+  const checkAndCleanupSingleBR = () => {
+    if (!editorRef.current) return;
+    
+    // Check if editor only contains a single BR and no meaningful text content
+    const hasOnlySingleBR = editorRef.current.children.length === 1 && 
+                           editorRef.current.firstChild?.nodeType === Node.ELEMENT_NODE &&
+                           (editorRef.current.firstChild as Element).tagName === 'BR';
+    
+    // Only cleanup if there's truly no meaningful content (no text, no mentions)
+    const hasNoTextContent = editorRef.current.textContent?.trim() === '';
+    const hasNoMentions = editorRef.current.querySelectorAll('.mention').length === 0;
+    
+    if (hasOnlySingleBR && hasNoTextContent && hasNoMentions) {
+      // Remove the single BR to keep editor clean
       editorRef.current.innerHTML = '';
     }
   };
@@ -134,9 +180,11 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     }
     
     
-    // If no mentions found, just set the text content and return
+    // If no mentions found, set the text content with proper newline handling
     if (mentions.length === 0) {
-      editorRef.current.textContent = rawTextContent;
+      // Convert newlines to BR elements for proper display
+      const htmlContent = rawTextContent.replace(/\n/g, '<br>');
+      editorRef.current.innerHTML = htmlContent;
       // Clean up any leftover BR elements
       cleanupEditor();
       // Reset the rebuilding flag
@@ -144,11 +192,8 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
       return;
     }
     
-    // Clear the editor and rebuild from scratch
-    editorRef.current.innerHTML = '';
-    
-    // Create a document fragment to build the content
-    const fragment = document.createDocumentFragment();
+    // Build HTML string directly to avoid browser wrapping elements in divs
+    let htmlContent = '';
     let lastIndex = 0;
     
     for (const mention of mentions) {
@@ -156,23 +201,27 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
       if (mention.index > lastIndex) {
         const textBefore = rawTextContent.substring(lastIndex, mention.index);
         if (textBefore) {
-          fragment.appendChild(document.createTextNode(textBefore));
+          // Split by newlines and create HTML with BR elements
+          const lines = textBefore.split('\n');
+          for (let i = 0; i < lines.length; i++) {
+            if (i > 0) {
+              // Add BR element before each line (except the first)
+              htmlContent += '<br>';
+            }
+            if (lines[i]) {
+              htmlContent += escapeHtml(lines[i]);
+            }
+          }
         }
       }
       
       // Add the mention element
-      const mentionElement = document.createElement('span');
-      mentionElement.className = 'mention';
-      mentionElement.setAttribute('data-mention', mention.text);
-      mentionElement.setAttribute('contenteditable', 'false');
-      
       // Extract the first field (name) from the mention text for display
       // Format: @[name][id] -> @name
       const nameMatch = mention.text.match(/@\[([^\]]+)\]/);
-      const displayText = nameMatch ? `@${nameMatch[1]}` : mention.text;
-      mentionElement.textContent = displayText;
+      const displayText = nameMatch ? nameMatch[1] : mention.text.replace('@', '');
       
-      fragment.appendChild(mentionElement);
+      htmlContent += `<span class="mention" data-mention="${escapeHtml(mention.text)}" contenteditable="false">@${escapeHtml(displayText)}</span>`;
       
       lastIndex = mention.index + mention.text.length;
     }
@@ -180,13 +229,31 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     // Add any remaining text after the last mention
     if (lastIndex < rawTextContent.length) {
       const textAfter = rawTextContent.substring(lastIndex);
-      if (textAfter) {
-        fragment.appendChild(document.createTextNode(textAfter));
+      // Always process textAfter, even if it's empty (to handle trailing newlines)
+      const lines = textAfter.split('\n');
+      
+      // Handle the case where text ends with newlines
+      if (textAfter.endsWith('\n')) {
+        // If text ends with newline, we need to add an extra empty line
+        lines.push('');
+      }
+      
+      for (let i = 0; i < lines.length; i++) {
+        if (i > 0) {
+          // Add BR element before each line (except the first)
+          htmlContent += '<br>';
+        }
+        if (lines[i]) {
+          htmlContent += escapeHtml(lines[i]);
+        }
       }
     }
     
-    // Append the fragment to the editor
-    editorRef.current.appendChild(fragment);
+    // Set the HTML content directly
+    editorRef.current.innerHTML = htmlContent;
+    
+    // Ensure there's always a trailing BR for proper line break behavior
+    ensureTrailingBR();
     
     // Reset the rebuilding flag immediately after DOM updates
     requestAnimationFrame(() => {
@@ -245,9 +312,9 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
               return NodeFilter.FILTER_REJECT;
             }
           }
-          // Skip BR elements
+          // Handle BR elements as newlines
           if (node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName === 'BR') {
-            return NodeFilter.FILTER_REJECT;
+            return NodeFilter.FILTER_ACCEPT;
           }
           return NodeFilter.FILTER_ACCEPT;
         }
@@ -269,6 +336,9 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
             // Fallback to text content if no data attribute
             text += element.textContent || '';
           }
+        } else if (element.tagName === 'BR') {
+          // Convert BR elements to newlines
+          text += '\n';
         }
       }
     }
@@ -363,9 +433,9 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
               return NodeFilter.FILTER_REJECT;
             }
           }
-          // Skip BR elements
+          // Handle BR elements as newlines
           if (node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName === 'BR') {
-            return NodeFilter.FILTER_REJECT;
+            return NodeFilter.FILTER_ACCEPT;
           }
           return NodeFilter.FILTER_ACCEPT;
         }
@@ -378,6 +448,9 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
         // We've reached the cursor position, stop here
         if (node.nodeType === Node.TEXT_NODE) {
           textBeforeCursor += (node.textContent || '').substring(0, range.startOffset);
+        } else if (node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName === 'BR') {
+          // If cursor is at a BR element, we're at the start of a new line
+          // Don't add anything, just break
         }
         break;
       } else if (node.nodeType === Node.TEXT_NODE) {
@@ -391,6 +464,9 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
           } else {
             textBeforeCursor += element.textContent || '';
           }
+        } else if (element.tagName === 'BR') {
+          // Convert BR elements to newlines in cursor position calculation
+          textBeforeCursor += '\n';
         }
       }
     }
@@ -400,9 +476,6 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
 
   const handleInput = () => {
     if (!editorRef.current) return;
-    
-    // Clean up any leftover BR elements first
-    cleanupEditor();
     
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return;
@@ -497,6 +570,10 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
         case 'Tab':
           e.preventDefault();
           if (allOptions[selectedIndex]) {
+            // Clear dropdown state before inserting mention
+            setShowDropdown(false);
+            setMentionStartIndex(-1);
+            setStoredCursorPosition(-1);
             insertMention(allOptions[selectedIndex]);
           }
           break;
@@ -504,6 +581,63 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
           setShowDropdown(false);
           setMentionStartIndex(-1);
           break;
+      }
+    } else if (e.key === 'Enter') {
+      // Prevent default browser behavior that creates div wrappers
+      e.preventDefault();
+      
+      // Handle edge cases for Enter key
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        
+        // Check if editor is empty or only contains a single BR
+        const isEditorEmpty = editorRef.current?.textContent?.trim() === '' && 
+                             editorRef.current?.children.length === 0;
+        const hasOnlySingleBR = editorRef.current?.children.length === 1 && 
+                               editorRef.current?.firstChild?.nodeType === Node.ELEMENT_NODE &&
+                               (editorRef.current.firstChild as Element).tagName === 'BR';
+        
+        if (isEditorEmpty) {
+          // If editor is completely empty, insert two BR elements
+          const br1 = document.createElement('br');
+          const br2 = document.createElement('br');
+          range.deleteContents();
+          range.insertNode(br1);
+          range.insertNode(br2);
+          
+          // Move cursor after the second BR
+          range.setStartAfter(br2);
+          range.setEndAfter(br2);
+        } else if (hasOnlySingleBR) {
+          // If only a single BR exists, remove it and insert two BR elements
+          if (editorRef.current) {
+            editorRef.current.innerHTML = '';
+            const br1 = document.createElement('br');
+            const br2 = document.createElement('br');
+            editorRef.current.appendChild(br1);
+            editorRef.current.appendChild(br2);
+            
+            // Move cursor after the second BR
+            range.setStartAfter(br2);
+            range.setEndAfter(br2);
+          }
+        } else {
+          // Normal case: insert a single BR element
+          const br = document.createElement('br');
+          range.deleteContents();
+          range.insertNode(br);
+          
+          // Move cursor after the BR element
+          range.setStartAfter(br);
+          range.setEndAfter(br);
+          
+          // Ensure there's always a trailing BR for proper line break behavior
+          ensureTrailingBR();
+        }
+        
+        selection.removeAllRanges();
+        selection.addRange(range);
       }
     } else if (e.key === 'Backspace') {
       // Handle backspace when cursor is after a mention
@@ -621,6 +755,11 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
             }
           }
         }
+        
+        // Check if only a single BR remains after any deletion
+        setTimeout(() => {
+          checkAndCleanupSingleBR();
+        }, 0);
       }
     }
   };
@@ -773,7 +912,9 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
         className={`w-full min-h-[120px] p-3 border border-gray-300 rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent whitespace-pre-wrap ${className}`}
         style={{ 
           minHeight: '120px',
-          overflow: 'auto'
+          overflow: 'auto',
+          whiteSpace: 'pre-wrap',
+          wordWrap: 'break-word'
         }}
         data-placeholder={placeholder}
         suppressContentEditableWarning={true}
