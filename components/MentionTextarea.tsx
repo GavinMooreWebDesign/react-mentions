@@ -471,6 +471,11 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
       setMentionStartIndex(-1);
       setStoredCursorPosition(-1);
     }
+    
+    // Always call onChange when input changes
+    if (onChange && !isRebuilding) {
+      onChange(getRawTextContent());
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {

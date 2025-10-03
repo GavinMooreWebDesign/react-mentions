@@ -2,9 +2,11 @@
 
 import { useState } from 'react';
 import MentionTextarea from '../components/MentionTextarea';
+import MentionDisplay from '../components/MentionDisplay';
 
 export default function Home() {
   const [text, setText] = useState('');
+  const [displayText, setDisplayText] = useState('');
 
   return (
     <div className="max-w-2xl mx-auto p-6">
@@ -26,6 +28,29 @@ export default function Home() {
           mentionFields={['name', 'id']}
           allowCustomMentions={true}
         />
+        
+        <div className="mt-6">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-lg font-semibold">Preview:</h2>
+            <button
+              onClick={() => setDisplayText(text)}
+              className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+            >
+              Update Display
+            </button>
+          </div>
+          <div className="p-3 border border-gray-200 rounded-md bg-gray-50">
+            {displayText ? (
+              <MentionDisplay
+                value={displayText}
+                className="text-gray-800"
+                mentionFields={['name', 'id']}
+              />
+            ) : (
+              <p className="text-gray-500 italic">Click "Update Display" to see the formatted text</p>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
