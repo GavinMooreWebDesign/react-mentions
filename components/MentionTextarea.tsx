@@ -17,6 +17,7 @@ interface MentionTextareaProps {
   maxWidth?: string;
   keepOpenOnSpace?: boolean;
   mentionFields?: string[];
+  allowCustomMentions?: boolean;
 }
 
 const MentionTextarea: React.FC<MentionTextareaProps> = ({
@@ -27,7 +28,8 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
   maxOptions = 5,
   maxWidth = '200px',
   keepOpenOnSpace = false,
-  mentionFields = ['name']
+  mentionFields = ['name'],
+  allowCustomMentions = false
 }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
@@ -58,6 +60,16 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     )
     .slice(0, maxOptions);
 
+  // Add custom mention option if enabled and conditions are met
+  const shouldShowCustomOption = allowCustomMentions && 
+    mentionQuery.length > 0 && 
+    !mentionQuery.includes(' ') && 
+    !filteredOptions.some(option => option.name.toLowerCase() === mentionQuery.toLowerCase());
+
+  const allOptions = shouldShowCustomOption 
+    ? [...filteredOptions, { name: `Create "${mentionQuery}"`, id: 'custom', isCustom: true }]
+    : filteredOptions;
+
   const formatMention = (option: MentionOption): string => {
     const parts: string[] = [];
     
@@ -70,8 +82,37 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     return `@${parts.join('')}`;
   };
 
+  const cleanupEditor = () => {
+    if (!editorRef.current) return;
+    
+    // Remove all BR elements that are not necessary
+    const brElements = editorRef.current.querySelectorAll('br');
+    brElements.forEach(br => {
+      // Only remove BR elements that are not the last child or are empty
+      if (br.nextSibling === null || br.textContent === '') {
+        br.remove();
+      }
+    });
+    
+    // Only clear innerHTML if there are no text nodes and no mention elements
+    const hasTextNodes = editorRef.current.querySelectorAll('*').length === 0 && 
+                        editorRef.current.textContent?.trim() === '';
+    const hasMentions = editorRef.current.querySelectorAll('.mention').length > 0;
+    
+    if (hasTextNodes && !hasMentions) {
+      // Only clear if there are no mentions and no meaningful content
+      editorRef.current.innerHTML = '';
+    }
+  };
+
   const rebuildMentionsFromText = (textContent?: string) => {
-    if (!editorRef.current || isRebuilding) {
+    if (!editorRef.current) {
+      return;
+    }
+    
+    if (isRebuilding) {
+      // If already rebuilding, wait a bit and try again
+      setTimeout(() => rebuildMentionsFromText(textContent), 10);
       return;
     }
     
@@ -96,6 +137,10 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     // If no mentions found, just set the text content and return
     if (mentions.length === 0) {
       editorRef.current.textContent = rawTextContent;
+      // Clean up any leftover BR elements
+      cleanupEditor();
+      // Reset the rebuilding flag
+      setIsRebuilding(false);
       return;
     }
     
@@ -143,10 +188,10 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     // Append the fragment to the editor
     editorRef.current.appendChild(fragment);
     
-    // Reset the rebuilding flag after a short delay
-    setTimeout(() => {
+    // Reset the rebuilding flag immediately after DOM updates
+    requestAnimationFrame(() => {
       setIsRebuilding(false);
-    }, 0);
+    });
   };
 
   useEffect(() => {
@@ -199,6 +244,10 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
             if (parent && parent.classList.contains('mention')) {
               return NodeFilter.FILTER_REJECT;
             }
+          }
+          // Skip BR elements
+          if (node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName === 'BR') {
+            return NodeFilter.FILTER_REJECT;
           }
           return NodeFilter.FILTER_ACCEPT;
         }
@@ -290,6 +339,11 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     
     const range = selection.getRangeAt(0);
     
+    // If the editor is empty, return 0
+    if (editorRef.current.textContent?.trim() === '') {
+      return 0;
+    }
+    
     // Create a range from the start of the editor to the cursor position
     const startRange = document.createRange();
     startRange.setStart(editorRef.current, 0);
@@ -308,6 +362,10 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
             if (parent && parent.classList.contains('mention')) {
               return NodeFilter.FILTER_REJECT;
             }
+          }
+          // Skip BR elements
+          if (node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName === 'BR') {
+            return NodeFilter.FILTER_REJECT;
           }
           return NodeFilter.FILTER_ACCEPT;
         }
@@ -343,8 +401,12 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
   const handleInput = () => {
     if (!editorRef.current) return;
     
+    // Clean up any leftover BR elements first
+    cleanupEditor();
+    
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return;
+    
     
     // Check if cursor is right after a mention
     const isAfterMention = checkIfCursorIsAfterMention();
@@ -359,6 +421,19 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     const textContent = getRawTextContent();
     const textBeforeCursor = textContent.substring(0, cursorPosition);
     const atIndex = textBeforeCursor.lastIndexOf('@');
+    
+    // Special handling for empty editor - check if user just typed @
+    if (textContent === '' && editorRef.current.textContent === '@') {
+      setMentionQuery('');
+      setShowDropdown(true);
+      setSelectedIndex(0);
+      setMentionStartIndex(0);
+      setStoredCursorPosition(1);
+      
+      const position = getCaretPosition();
+      setDropdownPosition(position);
+      return;
+    }
     
     if (atIndex !== -1) {
       const textAfterAt = textBeforeCursor.substring(atIndex + 1);
@@ -404,20 +479,20 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
         case 'ArrowDown':
           e.preventDefault();
           setSelectedIndex(prev => 
-            prev < filteredOptions.length - 1 ? prev + 1 : 0
+            prev < allOptions.length - 1 ? prev + 1 : 0
           );
           break;
         case 'ArrowUp':
           e.preventDefault();
           setSelectedIndex(prev => 
-            prev > 0 ? prev - 1 : filteredOptions.length - 1
+            prev > 0 ? prev - 1 : allOptions.length - 1
           );
           break;
         case 'Enter':
         case 'Tab':
           e.preventDefault();
-          if (filteredOptions[selectedIndex]) {
-            insertMention(filteredOptions[selectedIndex]);
+          if (allOptions[selectedIndex]) {
+            insertMention(allOptions[selectedIndex]);
           }
           break;
         case 'Escape':
@@ -471,16 +546,73 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
               rebuildMentionsFromText();
               
               // Set cursor position where the mention was
+              // We need to find the correct position in the rebuilt content
+              const newTextContent = getRawTextContent();
+              const targetPosition = Math.min(cursorPosition, newTextContent.length);
+              
+              // Find the node and offset that corresponds to the target position
               const newRange = document.createRange();
-              const textNode = editorRef.current?.firstChild;
-              if (textNode && textNode.nodeType === Node.TEXT_NODE && textNode.textContent) {
-                const textLength = textNode.textContent.length;
-                const safeCursorPosition = Math.min(cursorPosition, textLength);
-                newRange.setStart(textNode, safeCursorPosition);
-                newRange.setEnd(textNode, safeCursorPosition);
-                selection.removeAllRanges();
-                selection.addRange(newRange);
+              let currentPosition = 0;
+              let found = false;
+              
+              const walker = document.createTreeWalker(
+                editorRef.current!,
+                NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT,
+                {
+                  acceptNode: (node) => {
+                    if (node.nodeType === Node.TEXT_NODE) {
+                      const parent = node.parentElement;
+                      if (parent && parent.classList.contains('mention')) {
+                        return NodeFilter.FILTER_REJECT;
+                      }
+                    }
+                    if (node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName === 'BR') {
+                      return NodeFilter.FILTER_REJECT;
+                    }
+                    return NodeFilter.FILTER_ACCEPT;
+                  }
+                }
+              );
+              
+              let node;
+              while (node = walker.nextNode()) {
+                if (node.nodeType === Node.TEXT_NODE) {
+                  const textLength = (node.textContent || '').length;
+                  if (currentPosition + textLength >= targetPosition) {
+                    const offset = targetPosition - currentPosition;
+                    newRange.setStart(node, offset);
+                    newRange.setEnd(node, offset);
+                    found = true;
+                    break;
+                  }
+                  currentPosition += textLength;
+                } else if (node.nodeType === Node.ELEMENT_NODE) {
+                  const element = node as Element;
+                  if (element.classList.contains('mention')) {
+                    const rawMention = element.getAttribute('data-mention');
+                    if (rawMention) {
+                      const mentionLength = rawMention.length;
+                      if (currentPosition + mentionLength >= targetPosition) {
+                        // Position is within this mention, place cursor after it
+                        newRange.setStartAfter(element);
+                        newRange.setEndAfter(element);
+                        found = true;
+                        break;
+                      }
+                      currentPosition += mentionLength;
+                    }
+                  }
+                }
               }
+              
+              if (!found) {
+                // Fallback: place cursor at the end
+                newRange.selectNodeContents(editorRef.current!);
+                newRange.collapse(false);
+              }
+              
+              selection.removeAllRanges();
+              selection.addRange(newRange);
             }
           }
         }
@@ -489,7 +621,9 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
   };
 
   const insertMention = (option: MentionOption) => {
-    if (!editorRef.current) return;
+    if (!editorRef.current) {
+      return;
+    }
 
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) {
@@ -500,6 +634,18 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
     
     // Use the stored cursor position instead of calculating a new one
     const cursorPosition = storedCursorPosition !== -1 ? storedCursorPosition : getCursorPositionInRawText();
+    
+    
+    // Handle custom mention creation
+    let mentionToInsert = option;
+    if (option.isCustom) {
+      // Create a custom mention object with the query text
+      mentionToInsert = {
+        name: mentionQuery,
+        id: `custom-${Date.now()}`,
+        isCustom: true
+      };
+    }
     
     // Find the @ symbol that's currently being typed (the one right before the cursor)
     let atIndex = -1;
@@ -537,7 +683,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
       if (true) { // We already verified this @ is not part of an existing mention
         const beforeAt = textContent.substring(0, atIndex);
         const afterCursor = textContent.substring(cursorPosition);
-        const mentionText = formatMention(option);
+        const mentionText = formatMention(mentionToInsert);
         
         // Use a more robust approach that works with the overall text content
         // and then rebuilds the DOM structure properly
@@ -548,7 +694,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
         rebuildMentionsFromText(newText);
         
         // Find the inserted mention element for cursor positioning
-        const insertedMentionElement = editorRef.current?.querySelector(`[data-mention="${formatMention(option)}"]`);
+        const insertedMentionElement = editorRef.current?.querySelector(`[data-mention="${formatMention(mentionToInsert)}"]`);
         
         // Set cursor position after the inserted mention
         if (insertedMentionElement) {
@@ -566,20 +712,41 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
           if (editorRef.current) {
             editorRef.current.focus();
           }
+        } else {
+          // Fallback: place cursor at the end of the content
+          const newRange = document.createRange();
+          newRange.selectNodeContents(editorRef.current!);
+          newRange.collapse(false);
+          
+          const selection = window.getSelection();
+          if (selection) {
+            selection.removeAllRanges();
+            selection.addRange(newRange);
+          }
+          
+          if (editorRef.current) {
+            editorRef.current.focus();
+          }
         }
         
-        setShowDropdown(false);
-        setMentionStartIndex(-1);
-        setStoredCursorPosition(-1); // Clear the stored cursor position
+        // State is already cleared in handleOptionClick
       }
     }
   };
 
   const handleOptionClick = (option: MentionOption) => {
-    insertMention(option);
-    // Focus back to the editor
-    if (editorRef.current) {
-      editorRef.current.focus();
+    // Prevent double-click issues and multiple rapid clicks
+    if (showDropdown && !isRebuilding) {
+      // Close dropdown immediately to prevent multiple clicks
+      setShowDropdown(false);
+      setMentionStartIndex(-1);
+      setStoredCursorPosition(-1);
+      
+      insertMention(option);
+      // Focus back to the editor
+      if (editorRef.current) {
+        editorRef.current.focus();
+      }
     }
   };
 
@@ -607,7 +774,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
         suppressContentEditableWarning={true}
       />
       
-      {showDropdown && filteredOptions.length > 0 && (
+      {showDropdown && allOptions.length > 0 && (
         <div
           ref={dropdownRef}
           className="absolute z-50 bg-white border border-gray-300 rounded-md shadow-lg"
@@ -618,7 +785,7 @@ const MentionTextarea: React.FC<MentionTextareaProps> = ({
             maxWidth: maxWidth
           }}
         >
-          {filteredOptions.map((option, index) => (
+          {allOptions.map((option, index) => (
             <div
               key={option.name}
               className={`px-3 py-2 cursor-pointer hover:bg-gray-100 ${

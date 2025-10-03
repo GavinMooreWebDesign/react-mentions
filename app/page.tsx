@@ -12,7 +12,7 @@ export default function Home() {
       <div className="space-y-4">
         <div className="mb-2">
           <p className="text-sm text-gray-600">
-            Type @ to see mentions
+            Type @ to see mentions. If you type something that doesn't match existing mentions, you can create a custom mention.
           </p>
         </div>
         <MentionTextarea
@@ -24,6 +24,7 @@ export default function Home() {
           maxWidth="300px"
           keepOpenOnSpace={true}
           mentionFields={['name', 'id']}
+          allowCustomMentions={true}
         />
       </div>
     </div>
